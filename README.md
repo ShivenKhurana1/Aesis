@@ -1,7 +1,13 @@
-# Tauri + Vanilla
+# Aesis
 
-This template should help get you started developing with Tauri in vanilla HTML, CSS and Javascript.
+## About it!
+- its basically a productivity app!
+- this is so far the beta version??? just a test to see how it fairs in the shipping process and also cuz i want other ppls ideas from voting!
+- Essentially what you can do is note your tasks in a neat format! (good for those who dont really know a good way of keeping on top of things)
 
-## Recommended IDE Setup
+## Future things in mind
+- redevelop the logo, it kinda looks rlly bad rn
+- add more productivity features and potentially a better pomodoro timer
+- maybe add spotify integration??
+- work on user benefits with the streak!
 
-- [VS Code](https://code.visualstudio.com/) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer)
