@@ -145,7 +145,12 @@
     font-size:12px;color:var(--text-2);width:100%;transition:background .12s,color .12s;margin-top:6px;
   }
   .settings-btn:hover{background:var(--surface-hover);color:var(--text);}
-
+  .menubar-btn{
+    display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:7px;
+    font-size:12px;color:var(--text-2);width:100%;transition:background .12s,color .12s;
+  }
+  .menubar-btn:hover{background:var(--surface-hover);color:var(--text);}
+  .menubar-btn.active{color:var(--accent);}
   .overlay{position:fixed;inset:0;z-index:100;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;padding:16px;}
   .overlay.open{display:flex;}
   .modal{
@@ -981,6 +986,14 @@
         <div class="accent-dot"    data-accent="green"  style="background:#30d158;color:#30d158" onclick="setAccent('green')"  title="Green"></div>
         <div class="accent-dot"    data-accent="teal"   style="background:#5ac8fa;color:#5ac8fa" onclick="setAccent('teal')"   title="Teal"></div>
       </div>
+      <button class="menubar-btn" id="menubar-btn" onclick="hideToTray()" title="Hide to menu bar">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="2" y="3" width="12" height="10" rx="1.5"/>
+          <path d="M5 10l3-3 3 3"/>
+          <path d="M8 7v5"/>
+        </svg>
+        <span>Minimize to Menu Bar</span>
+      </button>
       <button class="settings-btn" onclick="openSettings()">
         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="8" cy="8" r="3"/>
@@ -1482,7 +1495,7 @@ function setLayout(l){
 }
 
 /* ─── RENDER ─────────────────────────────── */
-function render(){ renderTasks(); updateCap(); updateBadge(); }
+function render(){ renderTasks(); updateCap(); updateBadge(); syncTray(); }
 
 /* ─── CAPACITY ───────────────────────────── */
 function todayActive(){ return S.tasks.filter(t=>t.place==='today'&&!t.done).length; }
@@ -1956,10 +1969,12 @@ function startDaily(){
     S.dailySecs++; S.dailySessionSecs++;
     updateDailyDisp();
   },1000);
+  syncTray();
 }
 function stopDaily(){
   S.dailyRunning=false; clearInterval(S.dailyInterval); S.dailyInterval=null;
   document.getElementById('daily-start-btn').textContent='Start';
+  syncTray();
 }
 function updateDailyDisp(){
   const h=Math.floor(S.dailySecs/3600).toString().padStart(2,'0');
@@ -2009,6 +2024,7 @@ function syncFocusStats(){
       <span class="log-task">${esc(l.task)}</span>
       <span class="log-dur">${fmtDur(l.dur)}</span>
     </div>`).join('');
+  syncTray();
 }
 function fmtDur(s){ const m=Math.floor(s/60); return m<60?`${m}m`:`${Math.floor(m/60)}h${m%60?m%60+'m':''}`; }
 
@@ -2047,9 +2063,10 @@ function startPomo(){
       updatePomoDisp();
     }
   },1000);
+  syncTray();
 }
-function pausePomo(){ S.pomoRunning=false; clearInterval(S.pomoInterval); document.getElementById('pomo-start-btn').textContent='Start'; }
-function resetPomo(){ pausePomo(); S.pomoPhase='focus'; S.pomoLeft=S.pomoDurMins*60; document.getElementById('pomo-phase-lbl').textContent='Focus'; updatePomoDisp(); }
+function pausePomo(){ S.pomoRunning=false; clearInterval(S.pomoInterval); document.getElementById('pomo-start-btn').textContent='Start'; syncTray(); }
+function resetPomo(){ pausePomo(); S.pomoPhase='focus'; S.pomoLeft=S.pomoDurMins*60; document.getElementById('pomo-phase-lbl').textContent='Focus'; updatePomoDisp(); syncTray(); }
 function updatePomoDisp(){
   const m=Math.floor(S.pomoLeft/60).toString().padStart(2,'0');
   const s=(S.pomoLeft%60).toString().padStart(2,'0');
@@ -2341,6 +2358,52 @@ function changeCalMonth(dir) {
   }
   renderStreakCal();
 }
+
+/* ─── MENU BAR / TRAY ────────────────────── */
+async function hideToTray() {
+  try {
+    await window.__TAURI__.invoke('hide_to_tray');
+  } catch (e) {}
+}
+
+async function syncTray() {
+  try {
+    const count = S.tasks.filter(t => t.place === 'today' && !t.done).length;
+    const running = S.dailyRunning || S.pomoRunning;
+    let label = '';
+    let task = S.activeFocusId ? (S.tasks.find(t => t.id === S.activeFocusId)?.title || '') : '';
+    if (S.focusMode === 'daily' && S.dailyRunning) {
+      const h = Math.floor(S.dailySecs / 3600);
+      const m = Math.floor((S.dailySecs % 3600) / 60);
+      const s = S.dailySecs % 60;
+      label = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+    } else if (S.focusMode === 'pomo') {
+      const m = Math.floor(S.pomoLeft / 60);
+      const s = S.pomoLeft % 60;
+      label = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+    }
+    await window.__TAURI__.invoke('update_tray_menu', {
+      taskCount: count,
+      timerRunning: running,
+      timerLabel: label,
+      currentTask: task,
+    });
+  } catch (e) {}
+}
+
+/* ─── EVENT LISTENERS FROM TRAY ──────────── */
+document.addEventListener('DOMContentLoaded', () => {
+  try {
+    window.__TAURI__.event.listen('show-quick-add', () => {
+      switchTab('tasks');
+      openAddForm();
+    });
+    window.__TAURI__.event.listen('show-quick-memo', () => {
+      switchTab('memo');
+      focusMemoInput();
+    });
+  } catch (e) {}
+});
 </script>
 </body>
 </html>
